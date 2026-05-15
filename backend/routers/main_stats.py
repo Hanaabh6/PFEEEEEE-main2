@@ -57,6 +57,7 @@ def _build_thing_state_map(thing_ids: list[str]) -> dict[str, dict[str, Any]]:
                 "id": 1,
                 "name": 1,
                 "status": 1,
+                "availability": 1,
                 "maintenance_state": 1,
             },
         )
@@ -129,7 +130,13 @@ def get_overview_stats(request: Request):
         })
         # Also include 'signalement' actions recorded in user_history_collection
         history_reports = user_history_collection.count_documents({
-            "action": {"$regex": "signal|SIGNALEMENT", "$options": "i"}
+            "action": {"$regex": "signal|SIGNALEMENT", "$options": "i"},
+            "$or": [
+                {"decision": {"$exists": False}},
+                {"decision": ""},
+                {"status": "signale"},
+                {"status": ""},
+            ],
         })
         pending_reports = notif_unread + history_reports
         

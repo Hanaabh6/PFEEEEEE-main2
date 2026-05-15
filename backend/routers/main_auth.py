@@ -603,12 +603,19 @@ def signup(data: SignupRequest = Body(...)):
     try:
         res = signup_user(email, data.password)
         if res.user:
-            supabase.table("utilisateur").insert({
-                "id": res.user.id,
-                "email": email,
-                "role": "user",
-                "localisation": None,
-            }).execute()
+            auth_row = _normalize_auth_user_payload(res.user)
+            profile_row = _ensure_user_profile_row(
+                str(res.user.id),
+                email=email,
+                role="user",
+                auth_row=auth_row,
+            )
+            if not profile_row:
+                try:
+                    delete_user_admin(str(res.user.id))
+                except Exception as cleanup_error:
+                    print(f"Erreur nettoyage auth signup '{res.user.id}': {cleanup_error}")
+                raise HTTPException(status_code=500, detail="Impossible de creer la ligne utilisateur")
             return {"success": True, "message": "Compte cree"}
 
         raise HTTPException(status_code=400, detail="Erreur signup")
@@ -1073,13 +1080,13 @@ def update_display_name(request: Request, data: UpdateDisplayNameRequest = Body(
             result = supabase.table("utilisateur").update(update_payload).eq("id", user_id).execute()
         else:
             print(f"[PATCH /user/display-name] Missing profile row, creating it...")
-            insert_payload = {
+            result = supabase.table("utilisateur").insert({
                 "id": user_id,
                 "email": user_email,
                 "role": "user",
                 "display_name": display_name,
-            }
-            result = supabase.table("utilisateur").insert(insert_payload).execute()
+                "updated_at": profile_update_timestamp,
+            }).execute()
         print(f"[PATCH /user/display-name] Supabase result: {result}")
         
         # Certains clients Supabase retournent une erreur ou status en cas de violation de contrainte
